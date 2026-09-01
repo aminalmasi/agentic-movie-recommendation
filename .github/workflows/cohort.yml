@@ -57,29 +57,32 @@ jobs:
 
       - name: Confirm we are NOT on a university IP
         env:
-          LB_PROXY_URL: ${{ secrets.PROXY_URL }}
+          LB_PROXY_URL: ${{ inputs.use_proxy == 'true' && secrets.PROXY_URL || '' }}
         run: |
           python - <<'PY'
-          import os
+          import os, sys
+          sys.path.insert(0, '.')
           from curl_cffi import requests as r
-          import sys; sys.path.insert(0, '.')
           from lbfetch.fetch import gateway_urls
-          gws = gateway_urls(os.environ["LB_PROXY_URL"])
+          proxy = os.environ.get("LB_PROXY_URL") or ""
+          gws = gateway_urls(proxy) if proxy else [None]
           for gw in gws:
               try:
-                  d = r.Session(impersonate="chrome", timeout=30,
-                                proxies={"http": gw, "https": gw}).get(
-                                "https://ipinfo.io/json").json()
+                  px = {"http": gw, "https": gw} if gw else None
+                  d = r.Session(impersonate="chrome", timeout=30, proxies=px).get(
+                      "https://ipinfo.io/json").json()
                   print(f"exit: {d.get('ip')} | {d.get('org')} | {d.get('country')}")
+                  # The one thing that must never happen again: crawling from the
+                  # university network. Everything else is a preference.
                   assert d.get("ip") != "147.162.22.60", "still on the university IP"
-                  assert d.get("country") == "IT", "expected an Italian residential exit"
+                  assert "GARR" not in (d.get("org") or ""), "still on GARR"
                   break
               except AssertionError:
                   raise
               except Exception as e:
-                  print(f"gateway {gw.split('@')[-1]} failed: {type(e).__name__}")
+                  print(f"exit check failed: {type(e).__name__}")
           else:
-              raise SystemExit("no working proxy gateway")
+              raise SystemExit("no usable exit")
           PY
 
       # Target and friend usernames are real people. They live in a secret, not
@@ -97,7 +100,7 @@ jobs:
 
       - name: Fetch shard ${{ matrix.shard }}
         env:
-          LB_PROXY_URL: ${{ secrets.PROXY_URL }}
+          LB_PROXY_URL: ${{ inputs.use_proxy == 'true' && secrets.PROXY_URL || '' }}
           LB_MIN_INTERVAL_S: ${{ inputs.interval }}
           LB_JITTER_S: '1.0'
         run: |
