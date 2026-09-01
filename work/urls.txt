@@ -1,0 +1,6 @@
+# mixed-host example: three hosts = three independent rate budgets
+https://letterboxd.com/film/parasite-2019/
+https://letterboxd.com/film/anora/
+https://letterboxd.com/film/bugonia/
+https://api.trakt.tv/movies/tt6751668/ratings?extended=all
+https://datasets.imdbws.com/title.ratings.tsv.gz

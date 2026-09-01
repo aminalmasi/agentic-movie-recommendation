@@ -1,0 +1,302 @@
+<title>Twin Seed Picker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  :root{
+    --ground:#F7F8F8;--panel:#FFF;--sunk:#EDF0F2;--row:#FFF;--row-alt:#FAFBFC;
+    --ink:#14181C;--ink-2:#43525C;--ink-3:#7A8992;--rule:#DCE2E6;--rule-2:#C3CCD2;
+    --keep:#128A46;--cut:#C25100;--learn:#1173A8;
+    --keep-bg:#E4F5EB;--cut-bg:#FCEDE1;--learn-bg:#E3F1F9;--sel:#E4F5EB;
+  }
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#14181C;--panel:#1B2126;--sunk:#232B31;--row:#1B2126;--row-alt:#1E262B;
+    --ink:#EDF2F4;--ink-2:#A7B6BF;--ink-3:#78888F;--rule:#2C353B;--rule-2:#3D4950;
+    --keep:#3FD37E;--cut:#FF9A3C;--learn:#5CC2F0;
+    --keep-bg:#16301F;--cut-bg:#32220F;--learn-bg:#132934;--sel:#16301F;
+  }}
+  :root[data-theme="dark"]{
+    --ground:#14181C;--panel:#1B2126;--sunk:#232B31;--row:#1B2126;--row-alt:#1E262B;
+    --ink:#EDF2F4;--ink-2:#A7B6BF;--ink-3:#78888F;--rule:#2C353B;--rule-2:#3D4950;
+    --keep:#3FD37E;--cut:#FF9A3C;--learn:#5CC2F0;
+    --keep-bg:#16301F;--cut-bg:#32220F;--learn-bg:#132934;--sel:#16301F;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);margin:0;padding:0 18px 80px;
+    font-family:"Bricolage Grotesque","Helvetica Neue",sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:clamp(1.8rem,4vw,2.6rem);font-weight:800;letter-spacing:-.025em;margin:0 0 .15em;text-wrap:balance}
+  .sub{color:var(--ink-2);margin:0 0 4px;max-width:64ch}
+  header{padding:44px 0 22px}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:.68rem;font-weight:700;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px}
+  .mono,code{font-family:"JetBrains Mono",monospace}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* budget meter — sticky, because it is the whole point of the page */
+  .meter{position:sticky;top:0;z-index:20;background:var(--panel);border:1px solid var(--rule);
+    border-radius:4px;padding:15px 18px;margin-bottom:18px;box-shadow:0 2px 14px rgba(0,0,0,.06)}
+  .mrow{display:flex;gap:26px;flex-wrap:wrap;align-items:baseline}
+  .stat{display:flex;flex-direction:column;gap:1px}
+  .stat b{font-family:"JetBrains Mono",monospace;font-size:1.32rem;font-weight:700;
+    font-variant-numeric:tabular-nums;line-height:1.1}
+  .stat span{font-family:"JetBrains Mono",monospace;font-size:.63rem;font-weight:500;
+    letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+  .bar{height:6px;background:var(--sunk);border-radius:3px;margin-top:12px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--keep);width:0;transition:width .18s ease}
+  .bar.over i{background:var(--cut)}
+  .ceil{font-size:.78rem;color:var(--ink-3);margin-top:6px}
+  .ceil.over{color:var(--cut);font-weight:700}
+
+  .controls{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  button{font-family:inherit;font-size:.82rem;font-weight:500;padding:7px 13px;border-radius:3px;
+    border:1px solid var(--rule-2);background:var(--panel);color:var(--ink);cursor:pointer}
+  button:hover{border-color:var(--ink-3)}
+  button.on{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+  label.chk{font-size:.82rem;color:var(--ink-2);display:flex;gap:6px;align-items:center;cursor:pointer}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:.87rem;min-width:760px}
+  th{font-family:"JetBrains Mono",monospace;font-size:.63rem;font-weight:700;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--ink-3);text-align:left;padding:11px 12px;
+    border-bottom:1px solid var(--rule-2);white-space:nowrap;cursor:pointer;user-select:none;
+    position:sticky;top:0;background:var(--panel)}
+  th:hover{color:var(--ink)}
+  th.r,td.r{text-align:right}
+  td{padding:8px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
+  tbody tr{background:var(--row)}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  tbody tr.sel{background:var(--sel)}
+  tbody tr.dead td{color:var(--ink-3)}
+  td.t{white-space:normal;min-width:230px}
+  td.po{padding:5px 0 5px 12px;width:56px}
+  td.po img{width:44px;height:66px;object-fit:cover;border-radius:2px;display:block;
+    background:var(--sunk);box-shadow:0 1px 3px rgba(0,0,0,.22)}
+  .noposter{width:44px;height:66px;border-radius:2px;background:var(--sunk);display:block}
+
+  /* poster wall — the whole reason to embed the images */
+  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:13px;
+    border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:15px}
+  .card{cursor:pointer;position:relative;border-radius:3px;overflow:hidden;
+    border:2px solid transparent;background:var(--sunk)}
+  .card img{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
+  .card.sel{border-color:var(--keep)}
+  .card.sel::after{content:"✓";position:absolute;top:5px;right:5px;width:19px;height:19px;
+    border-radius:50%;background:var(--keep);color:#fff;font-size:12px;font-weight:700;
+    display:grid;place-items:center}
+  .card.dead{opacity:.34}
+  .card .cap{padding:5px 6px;font-size:.66rem;line-height:1.25;color:var(--ink-2)}
+  .card .cap b{display:block;color:var(--ink);font-weight:500;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .card .cap span{font-family:"JetBrains Mono",monospace;font-size:.6rem;color:var(--ink-3)}
+  .band{font-family:"JetBrains Mono",monospace;font-size:.6rem;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;padding:2px 6px;border-radius:2px}
+  .band.sweet{background:var(--keep-bg);color:var(--keep)}
+  .band.small{background:var(--learn-bg);color:var(--learn)}
+  .band.big{background:var(--cut-bg);color:var(--cut)}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--keep);cursor:pointer}
+
+  .out{margin-top:20px;background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:17px 19px}
+  .out h3{font-size:.95rem;font-weight:700;margin:0 0 .5em}
+  pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;padding:13px 15px;
+    overflow-x:auto;font-family:"JetBrains Mono",monospace;font-size:.78rem;margin:0 0 12px;
+    white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+  .hint{font-size:.8rem;color:var(--ink-3);margin:0}
+  :focus-visible{outline:2px solid var(--keep);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Twin seed selection · __USER__</div>
+  <h1>Twin Seed Picker</h1>
+  <p class="sub">Pick the films to hunt twins with. Cost per seed spans four orders of magnitude, so the budget meter is the real interface — choose until you hit your ceiling, then stop.</p>
+</header>
+
+<div class="meter">
+  <div class="mrow">
+    <div class="stat"><b id="nSel">0</b><span>seeds</span></div>
+    <div class="stat"><b id="nPages">0</b><span>pages</span></div>
+    <div class="stat"><b id="nHours">0.0 h</b><span>wall clock</span></div>
+    <div class="stat"><b id="nMB">0 MB</b><span>proxy traffic</span></div>
+    <div class="stat"><b id="nCost">$0.00</b><span>at $1/GB</span></div>
+    <div class="stat"><b id="nIdf">0.0</b><span>idf mass</span></div>
+  </div>
+  <div class="bar" id="bar"><i id="barFill"></i></div>
+  <div class="ceil" id="ceil">ceiling 10 h — 8,000 pages</div>
+</div>
+
+<div class="controls">
+  <button id="fSweet" class="on">Sweet spot only</button>
+  <button id="fLoved">Rated ≥4</button>
+  <button id="fAll">All watched</button>
+  <button id="pickCheap">Auto-fill to ceiling</button>
+  <button id="clear">Clear</button>
+  <button id="viewToggle">Poster wall</button>
+  <label class="chk"><input type="checkbox" id="terr"> territory mode (all watchers, not just ≥4)</label>
+</div>
+
+<div class="wall" id="wall" hidden></div>
+
+<div class="tablewrap" id="tablewrap">
+  <table>
+    <thead><tr>
+      <th style="width:34px"></th>
+      <th style="width:56px"></th>
+      <th data-k="title">Film</th>
+      <th class="r" data-k="rating">You</th>
+      <th class="r" data-k="total">LB ratings</th>
+      <th class="r" data-k="pool">Pool ≥4</th>
+      <th class="r" data-k="pages">Pages</th>
+      <th class="r" data-k="idf">IDF</th>
+      <th data-k="band">Band</th>
+    </tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+</div>
+
+<div class="out">
+  <h3>Run it</h3>
+  <pre id="cmd">Select at least one film.</pre>
+  <pre id="js">[]</pre>
+  <p class="hint">Save the second block as <code>seeds.json</code> and pass <code>--seed-file seeds.json</code>, or paste the slug list straight into <code>--seeds</code>. Seeds you recruit with must be excluded from any later evaluation.</p>
+</div>
+</div>
+
+<script>
+const FILMS = __FILMS__;
+const SPP = __SPP__, KBPP = __KBPP__, CEIL_H = 10;
+const CEIL_P = Math.round(CEIL_H*3600/SPP);
+const sel = new Set();
+let filter = "sweet", sortK = "pages", sortDir = 1, territory = false;
+
+const band = f => {
+  const pool = territory ? f.total : f.pool;
+  if (pool < 120) return ["small","too small to intersect"];
+  if (pool > 60000) return ["big","un-enumerable"];
+  return ["sweet","usable"];
+};
+const pagesOf = f => territory ? f.pagesAll : f.pages;
+
+function rows(){
+  let r = FILMS.slice();
+  if (filter === "sweet") r = r.filter(f => band(f)[0] === "sweet");
+  else if (filter === "loved") r = r.filter(f => f.rating !== null && f.rating >= 4);
+  r.sort((a,b)=>{
+    let A = sortK==="band" ? band(a)[0] : (sortK==="pages" ? pagesOf(a) : a[sortK]);
+    let B = sortK==="band" ? band(b)[0] : (sortK==="pages" ? pagesOf(b) : b[sortK]);
+    if (A===null) A = -1; if (B===null) B = -1;
+    return (A>B?1:A<B?-1:0)*sortDir;
+  });
+  return r;
+}
+
+let view = "table";
+function drawWall(){
+  const w = document.getElementById("wall");
+  w.innerHTML = "";
+  for (const f of rows()){
+    const [b,label] = band(f);
+    const d = document.createElement("div");
+    d.className = "card" + (sel.has(f.slug)?" sel":"") + (b!=="sweet"?" dead":"");
+    d.title = `${f.title} — ${f.total.toLocaleString()} ratings, ${pagesOf(f).toLocaleString()} pages (${label})`;
+    d.innerHTML = (f.p?`<img loading="lazy" src="data:image/jpeg;base64,${f.p}" alt="${f.title}">`
+                      :`<div style="aspect-ratio:2/3"></div>`)+
+      `<div class="cap"><b>${f.title}</b><span>${f.rating??"—"}★ · ${pagesOf(f).toLocaleString()}p</span></div>`;
+    d.onclick = () => { sel.has(f.slug)?sel.delete(f.slug):sel.add(f.slug); draw(); };
+    w.appendChild(d);
+  }
+  update();
+}
+
+function draw(){
+  document.getElementById("wall").hidden = view !== "wall";
+  document.getElementById("tablewrap").hidden = view === "wall";
+  if (view === "wall") return drawWall();
+  const tb = document.getElementById("tb");
+  tb.innerHTML = "";
+  for (const f of rows()){
+    const [b,label] = band(f);
+    const tr = document.createElement("tr");
+    if (sel.has(f.slug)) tr.className = "sel";
+    if (b !== "sweet") tr.className += " dead";
+    tr.innerHTML =
+      `<td><input type="checkbox" ${sel.has(f.slug)?"checked":""} data-s="${f.slug}"></td>`+
+      `<td class="po">${f.p?`<img loading="lazy" src="data:image/jpeg;base64,${f.p}" alt="">`:`<span class="noposter"></span>`}</td>`+
+      `<td class="t">${f.title}${f.year?` <span style="color:var(--ink-3)">${f.year}</span>`:""}</td>`+
+      `<td class="r num">${f.rating??"—"}</td>`+
+      `<td class="r num">${f.total.toLocaleString()}</td>`+
+      `<td class="r num">${(territory?f.total:f.pool).toLocaleString()}</td>`+
+      `<td class="r num">${pagesOf(f).toLocaleString()}</td>`+
+      `<td class="r num">${f.idf.toFixed(2)}</td>`+
+      `<td><span class="band ${b}">${label}</span></td>`;
+    tb.appendChild(tr);
+  }
+  tb.querySelectorAll("input[type=checkbox]").forEach(c=>{
+    c.onchange = () => { c.checked ? sel.add(c.dataset.s) : sel.delete(c.dataset.s); draw(); };
+  });
+  update();
+}
+
+function update(){
+  const chosen = FILMS.filter(f=>sel.has(f.slug));
+  const pages = chosen.reduce((s,f)=>s+pagesOf(f),0);
+  const idf = chosen.reduce((s,f)=>s+f.idf,0);
+  const mb = pages*KBPP/1024;
+  document.getElementById("nSel").textContent = chosen.length;
+  document.getElementById("nPages").textContent = pages.toLocaleString();
+  document.getElementById("nHours").textContent = (pages*SPP/3600).toFixed(1)+" h";
+  document.getElementById("nMB").textContent = Math.round(mb)+" MB";
+  document.getElementById("nCost").textContent = "$"+(mb/1024).toFixed(2);
+  document.getElementById("nIdf").textContent = idf.toFixed(1);
+  const pct = Math.min(100, pages/CEIL_P*100), over = pages > CEIL_P;
+  document.getElementById("barFill").style.width = pct+"%";
+  document.getElementById("bar").className = "bar"+(over?" over":"");
+  const c = document.getElementById("ceil");
+  c.className = "ceil"+(over?" over":"");
+  c.textContent = over
+    ? `over the ${CEIL_H} h ceiling by ${(pages-CEIL_P).toLocaleString()} pages — drop a seed`
+    : `ceiling ${CEIL_H} h — ${CEIL_P.toLocaleString()} pages (${(CEIL_P-pages).toLocaleString()} left)`;
+
+  const slugs = chosen.map(f=>f.slug);
+  document.getElementById("cmd").textContent = slugs.length
+    ? `python scripts/find_twins.py __USER__ \\\n  --seed-file seeds.json \\\n  --mode ${territory?"territory":"taste"} --min-rating 4 --include-likes \\\n  --max-hours ${CEIL_H} --out data/twins.json`
+    : "Select at least one film.";
+  document.getElementById("js").textContent =
+    JSON.stringify({user:"__USER__", mode: territory?"territory":"taste", seeds:slugs}, null, 1);
+}
+
+document.querySelectorAll("th[data-k]").forEach(th=>{
+  th.onclick = () => {
+    const k = th.dataset.k;
+    sortDir = (sortK === k) ? -sortDir : 1;
+    sortK = k; draw();
+  };
+});
+const setF = (f,id) => {
+  filter = f;
+  ["fSweet","fLoved","fAll"].forEach(x=>document.getElementById(x).classList.toggle("on", x===id));
+  draw();
+};
+document.getElementById("fSweet").onclick = ()=>setF("sweet","fSweet");
+document.getElementById("fLoved").onclick = ()=>setF("loved","fLoved");
+document.getElementById("fAll").onclick   = ()=>setF("all","fAll");
+document.getElementById("clear").onclick  = ()=>{ sel.clear(); draw(); };
+document.getElementById("terr").onchange  = e => { territory = e.target.checked; draw(); };
+document.getElementById("pickCheap").onclick = ()=>{
+  sel.clear();
+  let spent = 0;
+  // Cheapest-first, but only usable-band seeds: a pool too small cannot
+  // intersect and a pool too large cannot be enumerated.
+  for (const f of FILMS.filter(f=>band(f)[0]==="sweet").sort((a,b)=>pagesOf(a)-pagesOf(b))){
+    if (spent + pagesOf(f) > CEIL_P) continue;
+    sel.add(f.slug); spent += pagesOf(f);
+  }
+  draw();
+};
+document.getElementById("viewToggle").onclick = e => {
+  view = view === "table" ? "wall" : "table";
+  e.target.textContent = view === "wall" ? "Table" : "Poster wall";
+  e.target.classList.toggle("on", view === "wall");
+  draw();
+};
+draw();
+</script>

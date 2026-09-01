@@ -1,0 +1,99 @@
+name: cohort-fetch
+
+# Runs the Letterboxd crawl OFF the university network.
+#
+# WHY: labsrv7 is 147.162.22.60 / labsrv7.math.unipd.it (GARR). Scraping from
+# there puts a shared departmental server behind every request. It also cannot
+# reach the proxy at all -- GARR refuses commercial proxy providers as a
+# destination category (DataImpulse, Bright Data, Oxylabs, Smartproxy and
+# PacketStream all ConnectionRefused, while github.com:22 connects fine).
+# GitHub runners can reach the gateway on :823, which is why vinted runs here.
+#
+# NEVER run `curl -v` through the proxy in CI. GitHub masks PROXY_URL but not
+# its base64 Proxy-Authorization encoding -- that is how the password leaked on
+# 2026-07-27.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cohort:
+        description: 'cohort json in the repo (data/ is gitignored, so commit the file you want)'
+        required: true
+        default: 'data/random100.json'
+      shards:
+        description: 'parallel shards (each runner gets its own exit IP)'
+        required: false
+        default: '4'
+      interval:
+        description: 'seconds between requests PER SHARD'
+        required: false
+        default: '2.0'
+
+concurrency:
+  group: letterboxd-cohort
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350          # under GitHub's 6 h job ceiling
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install --quiet curl_cffi
+
+      # Carry the cache between runs. Entries are immutable, so the key is
+      # per-run with a restore prefix.
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: lb-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: lb-${{ matrix.shard }}-
+
+      - name: Confirm we are NOT on a university IP
+        env:
+          LB_PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from curl_cffi import requests as r
+          import sys; sys.path.insert(0, '.')
+          from lbfetch.fetch import gateway_urls
+          gws = gateway_urls(os.environ["LB_PROXY_URL"])
+          for gw in gws:
+              try:
+                  d = r.Session(impersonate="chrome", timeout=30,
+                                proxies={"http": gw, "https": gw}).get(
+                                "https://ipinfo.io/json").json()
+                  print(f"exit: {d.get('ip')} | {d.get('org')} | {d.get('country')}")
+                  assert d.get("ip") != "147.162.22.60", "still on the university IP"
+                  assert d.get("country") == "IT", "expected an Italian residential exit"
+                  break
+              except AssertionError:
+                  raise
+              except Exception as e:
+                  print(f"gateway {gw.split('@')[-1]} failed: {type(e).__name__}")
+          else:
+              raise SystemExit("no working proxy gateway")
+          PY
+
+      - name: Fetch shard ${{ matrix.shard }}
+        env:
+          LB_PROXY_URL: ${{ secrets.PROXY_URL }}
+          LB_MIN_INTERVAL_S: ${{ inputs.interval }}
+          LB_JITTER_S: '1.0'
+        run: |
+          python scripts/fetch_cohort.py \
+            --cohort "${{ inputs.cohort }}" \
+            --shard ${{ matrix.shard }} --shards ${{ inputs.shards }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cache-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: cache
+          retention-days: 7

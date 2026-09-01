@@ -1,0 +1,20 @@
+# Scraped data: a real person's viewing history and social graph.
+data/
+cache/
+.browser-profile*/
+.venv/
+__pycache__/
+*.pyc
+
+# Never commit proxy credentials.
+*.env
+
+# Third-party scraped content — not ours to publish.
+*.rss
+rt.html
+# Public dataset, downloadable from grouplens; no need to vendor 4.9MB.
+eval_methodology/*.zip
+# Belongs to the Series Graph project, not this one.
+.github/workflows/sgcrawl.yml
+# Series Graph project, lives elsewhere.
+sgfetch.py

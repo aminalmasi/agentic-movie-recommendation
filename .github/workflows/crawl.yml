@@ -1,0 +1,80 @@
+name: crawl
+
+# Off-cluster fetching. Two reasons to run here rather than on labsrv7:
+#   1. labsrv7 cannot reach ANY commercial proxy gateway -- GARR/Unipd rejects
+#      proxy providers as a destination category (measured 2026-08-26).
+#   2. Bulk volume should not come from a shared university IP.
+#
+# NOTE: GitHub runners are DATACENTER IPs, and Letterboxd's Cloudflare posture
+# is harsher on those than on the university IP. Run the probe job first and
+# read its output before trusting the fetch job. If the runner is challenged,
+# set USE_PROXY=true so traffic exits on an Italian residential IP instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urlfile:
+        description: 'path to a URL list in the repo'
+        required: true
+        default: 'work/urls.txt'
+      use_proxy:
+        description: 'route through DataImpulse (true/false)'
+        required: false
+        default: 'false'
+
+concurrency:
+  # One crawl at a time. Parallel runs would each keep their own rate budget --
+  # the shared limiter is file-backed and does not span runners.
+  group: crawl
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install --quiet curl_cffi
+      - name: Which paths does a datacenter IP actually reach?
+        env:
+          LB_PROXY_URL: ${{ inputs.use_proxy == 'true' && secrets.PROXY_URL || '' }}
+        # NEVER `curl -v` through the proxy here: GitHub masks PROXY_URL but not
+        # its base64 Proxy-Authorization encoding, which is how the password
+        # leaked on 2026-07-27.
+        run: python scripts/probe_paths.py --user "${{ vars.PROBE_USER }}" --no-browser --refresh
+
+  fetch:
+    needs: probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install --quiet curl_cffi
+
+      # Carry the cache between runs so a re-run never refetches. Keyed by run
+      # id with a restore prefix, because actions/cache entries are immutable.
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: lbcache-${{ github.run_id }}
+          restore-keys: lbcache-
+
+      - name: Crawl
+        env:
+          LB_PROXY_URL: ${{ inputs.use_proxy == 'true' && secrets.PROXY_URL || '' }}
+          LB_MIN_INTERVAL_S: '3.0'
+        run: python scripts/crawl.py "${{ inputs.urlfile }}" -j 1 -q
+
+      - name: Cache stats
+        run: |
+          python -c "import sys; sys.path.insert(0,'.'); from lbfetch import Cache; print(Cache('cache').stats())"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lbcache-${{ github.run_id }}
+          path: cache
+          retention-days: 7

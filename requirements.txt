@@ -1,0 +1,18 @@
+# Transport. curl_cffi replays a real Chrome TLS handshake; plain requests has a
+# distinctive JA3 that does not match the Chrome User-Agent we send, and
+# Cloudflare blocks the mismatch outright. This is THE dependency -- without it
+# every Letterboxd URL below returns 403 from this network.
+curl_cffi>=0.7
+
+# Fallback transport only (fetch.py uses it if curl_cffi is missing, and warns).
+requests>=2.31
+
+# Browser escalation for challenged paths. Needed 0 times so far from this IP,
+# kept because Cloudflare decides per-network and that can change.
+# Run `playwright install chromium` after pip install (no node required).
+playwright>=1.44
+
+# NOTE: no lxml, no beautifulsoup4. All parsing is stdlib `re` +
+# `xml.etree.ElementTree`. Letterboxd's markup is regular enough that anchored
+# regexes are faster and have fewer moving parts than a DOM parse, and the
+# fragile part is the anchor strings, not the parser.
