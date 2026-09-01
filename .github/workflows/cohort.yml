@@ -82,6 +82,19 @@ jobs:
               raise SystemExit("no working proxy gateway")
           PY
 
+      # Target and friend usernames are real people. They live in a secret, not
+      # in this public repo.
+      - name: Unpack cohort from secret
+        env:
+          COHORT_B64: ${{ inputs.cohort == 'COHORT_NEIGHBOURHOOD' && secrets.COHORT_NEIGHBOURHOOD || secrets.COHORT_RANDOM100 }}
+        run: |
+          mkdir -p data
+          python -c "
+          import base64, gzip, os
+          open('data/cohort.json','wb').write(gzip.decompress(base64.b64decode(os.environ['COHORT_B64'])))
+          import json; print('targets:', len(json.load(open('data/cohort.json'))['targets']))
+          "
+
       - name: Fetch shard ${{ matrix.shard }}
         env:
           LB_PROXY_URL: ${{ secrets.PROXY_URL }}
@@ -89,7 +102,7 @@ jobs:
           LB_JITTER_S: '1.0'
         run: |
           python scripts/fetch_cohort.py \
-            --cohort "${{ inputs.cohort }}" \
+            --cohort data/cohort.json \
             --shard ${{ matrix.shard }} --shards ${{ inputs.shards }}
 
       - uses: actions/upload-artifact@v4
