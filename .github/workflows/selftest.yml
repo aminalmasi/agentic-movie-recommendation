@@ -1,0 +1,71 @@
+name: selftest
+
+# Does a GitHub runner's own datacenter IP reach Letterboxd, or is the proxy
+# required? Settles it with measurements instead of assuming. The proxy is
+# metered by GB; the runner IP is free. If direct works, use it.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install --quiet curl_cffi
+
+      - name: Probe Letterboxd direct vs through the proxy
+        env:
+          LB_PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: |
+          python - <<'PY'
+          import os, re, sys, time
+          sys.path.insert(0, '.')
+          from curl_cffi import requests as r
+          from lbfetch.fetch import gateway_urls, HEADERS
+
+          PATHS = [
+            ("film page",       "https://letterboxd.com/film/parasite-2019/"),
+            ("user films",      "https://letterboxd.com/amindoalamas/films/"),
+            ("user films p2",   "https://letterboxd.com/amindoalamas/films/page/2/"),
+            ("user rss",        "https://letterboxd.com/amindoalamas/rss/"),
+            ("members rated 4", "https://letterboxd.com/film/more/members/rated/4/"),
+            ("following",       "https://letterboxd.com/amindoalamas/following/"),
+          ]
+          NAME = re.compile(r'href="/([a-z0-9_]+)/" class="name"')
+
+          def run(label, proxies):
+              print(f"\n=== {label} ===")
+              s = r.Session(impersonate="chrome", headers=HEADERS, timeout=45,
+                            proxies=proxies)
+              try:
+                  ip = s.get("https://ipinfo.io/json").json()
+                  print(f"  exit: {ip.get('ip')} | {ip.get('org')} | {ip.get('country')}")
+              except Exception as e:
+                  print(f"  exit lookup failed: {type(e).__name__}"); return
+              ok = 0
+              for name, url in PATHS:
+                  t0 = time.time()
+                  try:
+                      resp = s.get(url)
+                      n = len(set(NAME.findall(resp.text)))
+                      good = resp.status_code == 200 and len(resp.content) > 20000
+                      ok += good
+                      print(f"  {name:16s} {resp.status_code}  "
+                            f"{len(resp.content)/1024:>7.1f}KB  names={n:<3d} "
+                            f"{time.time()-t0:.1f}s  {'OK' if good else 'BLOCKED/THIN'}")
+                  except Exception as e:
+                      print(f"  {name:16s} {type(e).__name__}: {str(e)[:60]}")
+              print(f"  --> {ok}/{len(PATHS)} usable")
+
+          run("DIRECT (GitHub runner datacenter IP)", None)
+          for gw in gateway_urls(os.environ["LB_PROXY_URL"]):
+              try:
+                  run(f"PROXY via {gw.split('@')[-1]}", {"http": gw, "https": gw})
+                  break
+              except Exception as e:
+                  print(f"  gateway failed: {type(e).__name__}")
+          PY
