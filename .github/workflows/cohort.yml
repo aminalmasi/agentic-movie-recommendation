@@ -23,7 +23,7 @@ on:
       shards:
         description: 'parallel shards (each runner gets its own exit IP)'
         required: false
-        default: '4'
+        default: '8'
       interval:
         description: 'seconds between requests PER SHARD'
         required: false
@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

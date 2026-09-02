@@ -24,7 +24,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("fetch")
 
 coh = json.load(open(a.cohort))["targets"]
-todo = sorted({fr for v in coh.values() for fr in v["friends"]})
+# Targets need their OWN history as well: they are the users being predicted,
+# and the random-100 arm was only prescreened (1 page) to qualify it.
+todo = sorted(set(coh) | {fr for v in coh.values() for fr in v["friends"]})
 if a.shards > 1:
     import hashlib
     todo = [u for u in todo
